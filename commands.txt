@@ -1,3 +1,5 @@
+# Start training script: 
+
 python train.py \
   --model_name_or_path xlm-roberta-base \
   --dataset_name allegro/klej-cbd  \
@@ -13,3 +15,8 @@ python train.py \
   --logging_steps 50 \
   --report_to wandb \
   --overwrite_output_dir
+
+# Start W&B Sweep:
+
+wandb sweep sweep.yaml
+
