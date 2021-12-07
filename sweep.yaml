@@ -1,0 +1,69 @@
+program: train.py
+method: random
+metric:
+  goal: maximize
+  name: eval/f1
+parameters:
+  per_device_train_batch_size:
+    values:
+      - 16
+      - 32
+      - 64
+    distribution: categorical
+  num_train_epochs:
+    max: 6
+    min: 1
+    distribution: int_uniform
+  learning_rate:
+    max: 0.00006
+    min: 0.00001
+    distribution: uniform
+  model_name_or_path:
+    values:
+      - xlm-roberta-base
+    distribution: categorical
+  output_dir:
+    values:
+      - /tmp/cbd/
+    distribution: categorical
+  dataset_name:
+    values:
+      - allegro/klej-cbd
+    distribution: categorical
+  dataset_name:
+    values:
+      - allegro/klej-cbd
+    distribution: categorical
+  max_seq_length:
+    values:
+      - 64
+      - 128
+    distribution: categorical
+  evaluation_strategy:
+    values:
+      - steps
+    distribution: categorical
+  eval_steps:
+    values:
+      - 50
+    distribution: categorical
+  logging_strategy:
+    values:
+      - steps
+    distribution: categorical
+  logging_steps:
+    values:
+      - 50
+    distribution: categorical
+  report_to:
+    values:
+      - wandb
+    distribution: categorical
+  overwrite_output_dir:
+    values:
+      - True
+    distribution: categorical
+  do_train:
+    values:
+      - True
+    distribution: categorical

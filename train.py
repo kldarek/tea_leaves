@@ -31,7 +31,7 @@ from transformers.utils.versions import require_version
 
 import wandb
 
-wandb.init(project="test-project", entity="tealeaves")
+wandb.init(project="cbd-baseline", entity="tealeaves")
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -457,6 +457,9 @@ def main():
         data_collator = None
 
     # Initialize our Trainer
+    print(f'Size of train: {len(train_dataset)}')
+    print(f'Size of valid: {len(eval_dataset)}')
+
     trainer = Trainer(
         model=model,
         args=training_args,
