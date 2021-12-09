@@ -32,7 +32,7 @@ from transformers.utils.versions import require_version
 import wandb
 
 wandb.init(project="cbd-baseline", entity="tealeaves")
-
+wandb.run.log_code(".")
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 # check_min_version("4.13.0.dev0")
@@ -478,6 +478,9 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        f1s = [a['eval_f1'] for a in trainer.state.log_history if 'eval_f1' in a.keys()]
+        best_f1 = max(f1s)
+        wandb.run.summary['best_f1'] = best_f1
         metrics = train_result.metrics
         max_train_samples = (
             data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)

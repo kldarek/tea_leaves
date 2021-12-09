@@ -1,23 +1,29 @@
 program: train.py
-method: random
+method: grid
 metric:
   goal: maximize
-  name: eval/f1
+  name: best_f1
 parameters:
   per_device_train_batch_size:
     values:
       - 16
-      - 32
-      - 64
     distribution: categorical
   num_train_epochs:
-    max: 6
-    min: 1
-    distribution: int_uniform
+    values:
+      - 5
+    distribution: categorical
   learning_rate:
-    max: 0.00006
-    min: 0.00001
-    distribution: uniform
+    values:
+      - 0.00002
+    distribution: categorical
+  seed:
+    values:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+    distribution: categorical
   model_name_or_path:
     values:
       - xlm-roberta-base
@@ -30,13 +36,8 @@ parameters:
     values:
       - allegro/klej-cbd
     distribution: categorical
-  dataset_name:
-    values:
-      - allegro/klej-cbd
-    distribution: categorical
   max_seq_length:
     values:
-      - 64
       - 128
     distribution: categorical
   evaluation_strategy:
