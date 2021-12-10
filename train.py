@@ -31,6 +31,10 @@ from transformers.utils.versions import require_version
 
 import wandb
 
+from typing import List, Dict, Any
+import torch
+import augment
+
 wandb.init(project="cbd-baseline", entity="tealeaves")
 wandb.run.log_code(".")
 
@@ -173,19 +177,29 @@ class ModelArguments:
         },
     )
 
+@dataclass
+class MyArguments:
+    """
+    Extra arguments
+    """
+    aug_prob: float = field(default=0.1, metadata={"help": "Augment probability."})
+
+
 
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments, MyArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+        model_args, data_args, training_args, my_args = parser.parse_args_into_dataclasses()
+
+    wandb.config.update(my_args)
 
     # Setup logging
     logging.basicConfig(
@@ -248,6 +262,7 @@ def main():
         ).rename_column("target", "label")
         raw_datasets = raw_datasets["train"].train_test_split(test_size=0.2, shuffle=True, seed=42)
         raw_datasets["validation"] = raw_datasets.pop("test")
+        assert raw_datasets["validation"][0]["sentence"] == '@anonymized_account @anonymized_account @anonymized_account Nie zdążyłby w ogóle zareagować, już nie róbmy jaj.'
 
     else:
         # Loading a dataset from your local files.
@@ -449,18 +464,82 @@ def main():
             return metric.compute(predictions=preds, references=p.label_ids)
 
     # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
-    if data_args.pad_to_max_length:
-        data_collator = default_data_collator
-    elif training_args.fp16:
-        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
-    else:
-        data_collator = None
+    # if data_args.pad_to_max_length:
+    #     data_collator = default_data_collator
+    # elif training_args.fp16:
+    #     data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    # else:
+    #     data_collator = None
+
+    # Data collator for augmentations
+    print(f"AUGMENTATION PROBABILITY: {my_args.aug_prob}")
+    def base_augment_data_collator(features: List[Dict[str, Any]], aug_probability=my_args.aug_prob) -> Dict[str, Any]:
+
+        features = [augment.augment_function(x, tokenizer, prob=aug_probability) for x in features]
+
+        #DEBUG:
+        # for f in features:
+        #     if f['label'] ==1:
+        #         print(tokenizer.decode(f['input_ids']))
+
+        batch = tokenizer.pad(features, padding=True, return_tensors="pt")
+
+        batch["labels"] = batch.pop("label")
+
+        return batch
+
+    data_collator = base_augment_data_collator
 
     # Initialize our Trainer
     print(f'Size of train: {len(train_dataset)}')
     print(f'Size of valid: {len(eval_dataset)}')
 
-    trainer = Trainer(
+
+    from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
+
+    from transformers.file_utils import is_datasets_available
+
+    class MyTrainer(Trainer):
+
+        def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
+            """
+            Returns the evaluation :class:`~torch.utils.data.DataLoader`.
+            Subclass and override this method if you want to inject some custom behavior.
+            Args:
+                eval_dataset (:obj:`torch.utils.data.Dataset`, `optional`):
+                    If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`, columns not
+                    accepted by the ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
+            """
+            if eval_dataset is None and self.eval_dataset is None:
+                raise ValueError("Trainer: evaluation requires an eval_dataset.")
+            eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+
+            if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
+                eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
+
+            if isinstance(eval_dataset, torch.utils.data.IterableDataset):
+                return DataLoader(
+                    eval_dataset,
+                    batch_size=self.args.eval_batch_size,
+                    collate_fn=default_data_collator,   #KEY CHANGE = default data collator for eval!
+                    num_workers=self.args.dataloader_num_workers,
+                    pin_memory=self.args.dataloader_pin_memory,
+                )
+
+            eval_sampler = self._get_eval_sampler(eval_dataset)
+
+            return DataLoader(
+                eval_dataset,
+                sampler=eval_sampler,
+                batch_size=self.args.eval_batch_size,
+                collate_fn=default_data_collator,   #KEY CHANGE = default data collator for eval!
+                drop_last=self.args.dataloader_drop_last,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+            )
+
+
+    trainer = MyTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
