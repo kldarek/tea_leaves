@@ -34,6 +34,8 @@ import wandb
 from typing import List, Dict, Any
 import torch
 import augment
+from transformers.tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
+
 
 wandb.init(project="cbd-baseline", entity="tealeaves")
 wandb.run.log_code(".")
@@ -488,7 +490,24 @@ def main():
 
         return batch
 
-    data_collator = base_augment_data_collator
+    def random_mask_data_collator(features: List[Dict[str, Any]], mlm_probability=my_args.aug_prob) -> Dict[str, Any]:
+        
+        batch = tokenizer.pad(features, padding=True, return_tensors="pt")
+        batch["labels"] = batch.pop("label")
+
+        probability_matrix = torch.full(batch['input_ids'].shape, mlm_probability)
+        special_tokens_mask = [[
+            1 if x in [0, 1, 2] else 0 for x in row.tolist() 
+        ] for row in batch['input_ids']]
+        special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
+
+        probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+        masked_indices = torch.bernoulli(probability_matrix).bool()
+        batch['input_ids'][masked_indices] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
+
+        return batch
+
+    data_collator = random_mask_data_collator
 
     # Initialize our Trainer
     print(f'Size of train: {len(train_dataset)}')

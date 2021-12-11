@@ -16,7 +16,7 @@ python train.py \
   --report_to wandb \
   --seed 42 \
   --overwrite_output_dir \
-  --aug_prob 0.02
+  --aug_prob 0.05
 
 # Start W&B Sweep:
 
